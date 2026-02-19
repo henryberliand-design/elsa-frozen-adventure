@@ -1,0 +1,1860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a0a3e">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Elsa's Frozen Adventure</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='40%25'%3E%3Cstop offset='0%25' stop-color='%2387CEEB'/%3E%3Cstop offset='100%25' stop-color='%231a0a3e'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23g)'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='28' fill='white'%3E❄%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%231a0a3e'/%3E%3Ctext x='90' y='120' text-anchor='middle' font-size='80' fill='white'%3E❄%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Elsa's Frozen Adventure%22%2C%22short_name%22%3A%22Frozen%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%231a0a3e%22%2C%22theme_color%22%3A%22%231a0a3e%22%7D">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#1a0a3e;
+-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+-webkit-tap-highlight-color:transparent;touch-action:none;
+overscroll-behavior:none;position:fixed;top:0;left:0;font-family:sans-serif}
+canvas{display:block;position:absolute;top:0;left:0}
+#ui{position:fixed;bottom:0;left:0;right:0;pointer-events:none;
+padding-bottom:max(8px,env(safe-area-inset-bottom));z-index:10}
+.cr{display:flex;justify-content:space-between;align-items:flex-end;padding:0 12px 8px}
+.cb{pointer-events:auto;width:72px;height:72px;border-radius:50%;
+border:3px solid rgba(255,255,255,0.5);background:rgba(100,149,237,0.35);
+color:white;font-size:28px;font-weight:bold;display:flex;align-items:center;
+justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+cursor:pointer;touch-action:manipulation;transition:background 0.1s}
+.cb:active,.cb.held{background:rgba(100,149,237,0.7)}
+.dp{display:flex;gap:12px}
+.ac{display:flex;gap:12px}
+#dh{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);
+color:rgba(255,255,255,0.35);font:12px sans-serif;pointer-events:none;z-index:11}
+@media(pointer:coarse){#dh{display:none}}
+@media(pointer:fine){#ui{opacity:0.3}#ui:hover{opacity:1}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui"><div class="cr">
+<div class="dp">
+<button class="cb" id="bl">◀</button>
+<button class="cb" id="br">▶</button>
+</div>
+<div class="ac">
+<button class="cb" id="bj">⬆</button>
+<button class="cb" id="bi">❄</button>
+</div>
+</div></div>
+<div id="dh">← → move &nbsp; SPACE jump &nbsp; F ice power</div>
+<script>
+'use strict';
+/* ============================================
+   ELSA'S FROZEN ADVENTURE - A gift for Anna
+   ============================================ */
+
+// ── CANVAS SETUP ──
+const C=document.getElementById('c'),X=C.getContext('2d');
+let W,H,TS;
+
+function resize(){
+ W=window.innerWidth; H=window.innerHeight;
+ C.width=W; C.height=H;
+ // Show ~10 tiles horizontally for big characters
+ TS=Math.floor(W/10);
+ if(TS<50)TS=50;
+ if(TS>140)TS=140;
+}
+window.addEventListener('resize',resize);
+resize();
+
+// ── TILE TYPES ──
+const T={AIR:0,SOLID:1,SNOW:2,PUDDLE:3,GAP:4,DRIFT:5,BLOCK:6,
+SWITCH:7,DOOR:8,EXIT:9,SVEN:10,DECO:11,ICE:12,BRIDGE:13};
+
+// ── LEVEL DATA ── (30 wide x 12 tall, scrolling)
+const LW=30, LH=12;
+
+function mg(strings){
+ let g=[];
+ for(let r=0;r<LH;r++){
+  let row=[];
+  let s=r<strings.length?strings[r]:'';
+  for(let c=0;c<LW;c++){
+   let ch=c<s.length?s[c]:' ';
+   let v=0;
+   if(ch==='#')v=T.SOLID;
+   else if(ch==='*')v=T.SNOW;
+   else if(ch==='~')v=T.PUDDLE;
+   else if(ch==='-')v=T.GAP;
+   else if(ch==='S')v=T.DRIFT;
+   else if(ch==='B')v=T.BLOCK;
+   else if(ch==='!')v=T.SWITCH;
+   else if(ch==='D')v=T.DOOR;
+   else if(ch==='E')v=T.EXIT;
+   else if(ch==='V')v=T.SVEN;
+   row.push(v);
+  }
+  g.push(row);
+ }
+ return g;
+}
+
+const LEVELS=[
+// ── LEVEL 1: Coronation Ballroom ── (intro: learn move + jump + ice on puddle)
+{name:"The Coronation Ballroom",bg:'ballroom',snowTotal:4,
+hints:["Press → to walk right!","Press SPACE to jump!","Press F to shoot ice at the puddle!"],
+grid:mg([
+"                              ",//0
+"                              ",//1
+"               *              ",//2
+"              ###             ",//3
+"                              ",//4
+"     *                   E    ",//5
+"    ###    *            ###   ",//6
+"          ###                 ",//7
+"                   *          ",//8
+"              ~   ###         ",//9
+" *          ####              ",//10
+"##############################",//11
+])},
+
+// ── LEVEL 2: Arendelle Town ── (blast drift, push block onto switch, door opens)
+{name:"Arendelle Town",bg:'town',snowTotal:5,
+hints:["Blast the snowdrift with ice!","Push the block onto the switch!"],
+grid:mg([
+"                              ",//0
+"                              ",//1
+"                 *            ",//2
+"     *          ###           ",//3
+"    ###                       ",//4
+"              S           E   ",//5
+"          *  ###         ###  ",//6
+"         ###                  ",//7
+"                   B!         ",//8
+"   ~              ####  D     ",//9
+" *   *           *     ###    ",//10
+"##############################",//11
+])},
+
+// ── LEVEL 3: The Mountain Path ── (ice bridge over gap, find Sven, ride him)
+{name:"The Mountain Path",bg:'mountain',snowTotal:6,
+hints:["Freeze the gap to make a bridge!","Hop on Sven for a ride!"],
+grid:mg([
+"                              ",//0
+"                              ",//1
+"                          *   ",//2
+"          *              ###  ",//3
+"         ###                  ",//4
+"                    *     E   ",//5
+"     *             ###   ###  ",//6
+"    ###    ----               ",//7
+"           ####  S            ",//8
+"   ~             ##     V     ",//9
+"  ####   *             ###    ",//10
+"##############################",//11
+])},
+
+// ── LEVEL 4: The Storm ── (harder puzzles, multiple blocks+switches)
+{name:"The Storm",bg:'storm',snowTotal:7,
+hints:["Brave the storm!","Push blocks onto all switches!"],
+grid:mg([
+"                              ",//0
+"                        *     ",//1
+"          *            ###    ",//2
+"         ###   ----           ",//3
+"               ####   *    E  ",//4
+"   *                 ### #### ",//5
+"  ###    S                    ",//6
+"        ###    B!             ",//7
+"              ####   D        ",//8
+"    B!               ##       ",//9
+" * ####    ~      *           ",//10
+"##############################",//11
+])},
+
+// ── LEVEL 5: The Ice Palace ── (finale: tap to build palace, grand ending)
+{name:"The Ice Palace",bg:'palace',snowTotal:8,
+hints:["Welcome to the summit!","Tap ICE rapidly to build the palace!"],
+grid:mg([
+"                              ",//0
+"                              ",//1
+"        *          *          ",//2
+"       ###        ###         ",//3
+"                         *    ",//4
+"            *           ###   ",//5
+"   *       ###                ",//6
+"  ###                 B!    E ",//7
+"           ----      #### ###D",//8
+"    ~      #####            # ",//9
+"   ####           *    S      ",//10
+"##############################",//11
+])}
+];
+
+// ── GAME STATE ──
+const G={
+ screen:'title',level:0,time:0,
+ // Elsa position (tile coords)
+ px:1,py:9,vx:0,vy:0,dir:1,grounded:false,jumping:false,
+ frame:0,breath:0,walkCycle:0,
+ // Olaf
+ ox:0.5,oy:9,
+ // Camera
+ cx:0,cy:0,
+ // Ice
+ iceCD:0,proj:null,
+ // Snow
+ collected:0,total:0,totalAll:0,levelSnow:[0,0,0,0,0],
+ // Entities
+ blocks:[],switches:[],doors:[],particles:[],
+ // Sven
+ svenOn:false,svenX:0,svenY:0,svenRide:false,svenTimer:0,
+ // Exit
+ exitX:0,exitY:0,unlocked:false,
+ // Hint
+ hintIdx:0,hintTimer:0,hintText:'',
+ // Dress
+ iceDress:false,
+ // Transformation
+ transT:0,
+ // Story
+ storyText:'',storyLv:0,
+ // Storm
+ lightning:0,flash:0,
+ // Finale
+ finale:false,ftaps:0,fdone:false,
+ // Grid
+ grid:null,
+ // Weather snow
+ wsnow:[]
+};
+
+// Init weather snow
+for(let i=0;i<60;i++)G.wsnow.push({x:Math.random()*LW,y:Math.random()*LH,
+ s:1+Math.random()*2,vx:(Math.random()-0.5)*0.02,vy:0.01+Math.random()*0.015});
+
+// ── INPUT ──
+const K={l:false,r:false,j:false,i:false};
+let jPress=false,iPress=false;
+
+document.addEventListener('keydown',e=>{
+ let c=e.code;
+ if(c==='ArrowLeft'||c==='KeyA'){K.l=true;e.preventDefault();}
+ if(c==='ArrowRight'||c==='KeyD'){K.r=true;e.preventDefault();}
+ if(c==='Space'||c==='ArrowUp'||c==='KeyW'){if(!K.j)jPress=true;K.j=true;e.preventDefault();}
+ if(c==='KeyF'||c==='KeyZ'){if(!K.i)iPress=true;K.i=true;}
+ handleScreenInput();
+});
+document.addEventListener('keyup',e=>{
+ let c=e.code;
+ if(c==='ArrowLeft'||c==='KeyA')K.l=false;
+ if(c==='ArrowRight'||c==='KeyD')K.r=false;
+ if(c==='Space'||c==='ArrowUp'||c==='KeyW')K.j=false;
+ if(c==='KeyF'||c==='KeyZ')K.i=false;
+});
+
+function handleScreenInput(){
+ if(G.screen==='title')startGame();
+ else if(G.screen==='levelcomplete')nextLevel();
+ else if(G.screen==='story')afterStory();
+ else if(G.screen==='victory'){G.screen='title';G.level=0;G.totalAll=0;G.iceDress=false;}
+ else if(G.screen==='transform'&&G.transT>120)afterTransform();
+}
+
+// Touch
+function bind(id,key){
+ let el=document.getElementById(id);
+ if(!el)return;
+ let down=e=>{e.preventDefault();if(!K[key]&&(key==='j'))jPress=true;
+  if(!K[key]&&(key==='i'))iPress=true;K[key]=true;el.classList.add('held');};
+ let up=e=>{e.preventDefault();K[key]=false;el.classList.remove('held');};
+ el.addEventListener('touchstart',down,{passive:false});
+ el.addEventListener('touchend',up,{passive:false});
+ el.addEventListener('touchcancel',up,{passive:false});
+ el.addEventListener('mousedown',down);
+ el.addEventListener('mouseup',up);
+ el.addEventListener('mouseleave',up);
+}
+bind('bl','l');bind('br','r');bind('bj','j');bind('bi','i');
+
+// Screen clicks
+C.addEventListener('click',()=>handleScreenInput());
+C.addEventListener('touchend',e=>{
+ if(G.screen!=='playing')handleScreenInput();
+},{passive:true});
+
+// ── GAME FLOW ──
+function startGame(){
+ if(G.screen!=='title')return;
+ G.level=0; G.totalAll=0; G.iceDress=false;
+ showStory(0);
+}
+
+function showStory(lv){
+ G.storyLv=lv;
+ const stories=[
+  "Princess Anna's birthday is today!\nElsa must journey from the castle\nto the Ice Palace to prepare\na magical surprise!",
+  "Elsa enters Arendelle Town,\nwhere snow has blocked the paths.\nTime to use her ice powers!",
+  "The mountain trail is steep!\nMaybe Sven the reindeer\ncan help Elsa get there faster...",
+  "A fierce storm brews on the mountain!\nElsa must push through the blizzard\nto reach the summit!",
+  "The summit! This is where Elsa\nwill build the most magnificent\nIce Palace for Anna's party!"
+ ];
+ G.storyText=stories[lv]||'';
+ G.screen='story';
+}
+
+function afterStory(){
+ if(G.storyLv===2&&!G.iceDress){
+  G.screen='transform'; G.transT=0;
+ } else {
+  loadLevel(G.storyLv);
+ }
+}
+
+function afterTransform(){
+ G.iceDress=true;
+ loadLevel(G.storyLv);
+}
+
+function loadLevel(n){
+ G.level=n;
+ let lv=LEVELS[n];
+ // Deep copy grid
+ G.grid=lv.grid.map(r=>[...r]);
+ G.collected=0; G.total=lv.snowTotal;
+ G.blocks=[]; G.switches=[]; G.doors=[];
+ G.particles=[]; G.proj=null; G.iceCD=0;
+ G.svenOn=false; G.svenRide=false; G.svenTimer=0;
+ G.finale=false; G.ftaps=0; G.fdone=false;
+ G.hintIdx=0; G.hintTimer=0; G.hintText=lv.hints[0]||'';
+ G.unlocked=false; G.flash=0;
+
+ // Find entities
+ let spawnX=1,spawnY=LH-2;
+ for(let r=0;r<LH;r++){
+  for(let c=0;c<LW;c++){
+   let t=G.grid[r][c];
+   if(t===T.BLOCK){G.blocks.push({x:c,y:r,ox:c,oy:r});G.grid[r][c]=T.AIR;}
+   if(t===T.SWITCH){G.switches.push({x:c,y:r,on:false});G.grid[r][c]=T.AIR;}
+   if(t===T.DOOR){G.doors.push({x:c,y:r,open:false});G.grid[r][c]=T.DOOR;}
+   if(t===T.EXIT){G.exitX=c;G.exitY=r;G.grid[r][c]=T.AIR;}
+   if(t===T.SVEN){G.svenOn=true;G.svenX=c;G.svenY=r-1;G.grid[r][c]=T.AIR;}
+   // Find leftmost ground for spawn
+   if(t===T.SNOW&&c<4){
+    spawnX=c; spawnY=r-1;
+   }
+  }
+ }
+ // Better spawn: find first solid on bottom row and put Elsa above
+ for(let c=0;c<LW;c++){
+  if(G.grid[LH-1][c]===T.SOLID){spawnX=c+0.5;spawnY=LH-2;break;}
+ }
+ // Check for snow tile near start
+ for(let r=LH-3;r>=0;r--){
+  for(let c=0;c<3;c++){
+   if(G.grid[r][c]===T.SNOW){spawnX=c;spawnY=r-1;break;}
+  }
+ }
+
+ G.px=spawnX;G.py=spawnY;G.vx=0;G.vy=0;G.dir=1;G.grounded=false;
+ G.ox=spawnX-0.6;G.oy=spawnY;
+ G.cx=G.px-5;G.cy=0;
+ G.screen='playing';
+}
+
+function levelComplete(){
+ G.levelSnow[G.level]=G.collected;
+ G.totalAll+=G.collected;
+ G.screen='levelcomplete';
+}
+
+function nextLevel(){
+ if(G.screen!=='levelcomplete')return;
+ if(G.level<4){
+  showStory(G.level+1);
+ } else {
+  G.screen='victory';
+ }
+}
+
+// ── PHYSICS ──
+const GRAV=0.4, JUMPV=-8.5, MAXVY=12, SPD=0.18, MAXSX=4.5, FRIC=0.82;
+const PW=0.55, PH=0.95; // player hitbox in tiles
+
+function solid(gx,gy){
+ let c=Math.floor(gx),r=Math.floor(gy);
+ if(c<0||c>=LW||r>=LH)return true;
+ if(r<0)return false;
+ let t=G.grid[r][c];
+ if(t===T.SOLID||t===T.ICE||t===T.BRIDGE)return true;
+ if(t===T.DOOR){
+  for(let d of G.doors)if(d.x===c&&d.y===r&&!d.open)return true;
+ }
+ return false;
+}
+
+function blockAt(gx,gy){
+ let c=Math.floor(gx),r=Math.floor(gy);
+ for(let b of G.blocks)if(Math.floor(b.x)===c&&Math.floor(b.y)===r)return b;
+ return null;
+}
+
+function updateElsa(){
+ if(G.screen!=='playing')return;
+ G.breath+=0.05;
+ G.time++;
+
+ // Hints
+ G.hintTimer++;
+ if(G.hintTimer>240&&G.hintIdx<LEVELS[G.level].hints.length-1){
+  G.hintIdx++;G.hintTimer=0;G.hintText=LEVELS[G.level].hints[G.hintIdx];
+ }
+
+ // Storm effects
+ if(LEVELS[G.level].bg==='storm'){
+  if(Math.random()<0.003){G.lightning=20;G.flash=8;}
+  if(G.lightning>0)G.lightning--;
+  if(G.flash>0)G.flash--;
+ }
+
+ // Sven ride
+ if(G.svenRide){
+  G.svenTimer++;
+  G.svenX+=0.06;G.px=G.svenX+0.3;G.py=G.svenY-0.3;
+  // Auto-jump over obstacles
+  let fx=Math.floor(G.svenX+1.2),fy=Math.floor(G.svenY+1);
+  if(fx<LW&&fy<LH&&solid(fx,fy)){
+   G.svenY-=1.2; G.py=G.svenY-0.3;
+   for(let i=0;i<5;i++)spawnP(G.svenX+0.5,G.svenY+1,'#ddd',0.03);
+  }
+  if(G.svenY<LH-2){
+   let below=solid(G.svenX+0.5,G.svenY+1.5);
+   if(!below)G.svenY+=0.15;
+  }
+  G.ox=G.px-0.8;G.oy=G.py;
+  // End ride
+  if(G.svenTimer>200||G.svenX>LW-4){
+   G.svenRide=false;G.py=G.svenY-0.2;G.vy=0;G.vx=2;
+  }
+  updateCamera();
+  return;
+ }
+
+ // Movement
+ if(K.l){G.vx-=SPD;G.dir=-1;}
+ if(K.r){G.vx+=SPD;G.dir=1;}
+ G.vx*=FRIC;
+ if(Math.abs(G.vx)>MAXSX)G.vx=MAXSX*Math.sign(G.vx);
+ if(Math.abs(G.vx)<0.01)G.vx=0;
+
+ // Walk cycle
+ if(G.grounded&&Math.abs(G.vx)>0.3)G.walkCycle+=Math.abs(G.vx)*0.15;
+
+ // Jump
+ if(jPress&&G.grounded){
+  G.vy=JUMPV;G.grounded=false;G.jumping=true;
+  for(let i=0;i<6;i++)spawnP(G.px+0.3,G.py+PH,'#aaddff',0.04);
+ }
+ jPress=false;
+
+ // Gravity
+ G.vy+=GRAV;
+ if(G.vy>MAXVY)G.vy=MAXVY;
+
+ // Horizontal collision
+ let nx=G.px+G.vx*0.016*60;
+ let left=nx, right=nx+PW;
+ let top=G.py+0.05, bot=G.py+PH-0.05;
+ let blocked=false;
+ if(G.vx>0){
+  if(solid(right,top)||solid(right,bot)||solid(right,(top+bot)/2)){blocked=true;nx=Math.floor(right)-PW;}
+  let bk=blockAt(right,(top+bot)/2);
+  if(bk){tryPushBlock(bk,1);blocked=true;nx=bk.x-PW;}
+ }
+ if(G.vx<0){
+  if(solid(left,top)||solid(left,bot)||solid(left,(top+bot)/2)){blocked=true;nx=Math.floor(left)+1;}
+  let bk=blockAt(left,(top+bot)/2);
+  if(bk){tryPushBlock(bk,-1);blocked=true;nx=bk.x+1;}
+ }
+ if(blocked)G.vx=0;
+ G.px=nx;
+
+ // Vertical collision
+ let ny=G.py+G.vy*0.016*60;
+ G.grounded=false;
+ if(G.vy>0){
+  let bl=ny+PH, bx1=G.px+0.1, bx2=G.px+PW-0.1;
+  if(solid(bx1,bl)||solid(bx2,bl)){
+   ny=Math.floor(bl)-PH;G.vy=0;G.grounded=true;G.jumping=false;
+  }
+  // Land on blocks
+  for(let b of G.blocks){
+   if(G.px+PW>b.x&&G.px<b.x+1&&ny+PH>b.y&&ny+PH<b.y+0.3){
+    ny=b.y-PH;G.vy=0;G.grounded=true;G.jumping=false;
+   }
+  }
+ }
+ if(G.vy<0){
+  let tl=ny, tx1=G.px+0.1, tx2=G.px+PW-0.1;
+  if(solid(tx1,tl)||solid(tx2,tl)){ny=Math.floor(tl)+1;G.vy=0;}
+ }
+ G.py=ny;
+
+ // Fall off screen
+ if(G.py>LH+2){
+  G.px=1;G.py=LH-2;G.vx=0;G.vy=0;
+ }
+
+ // Collect snowflakes
+ for(let r=0;r<LH;r++){
+  for(let c=0;c<LW;c++){
+   if(G.grid[r][c]===T.SNOW){
+    let dx=G.px+PW/2-(c+0.5),dy=G.py+PH/2-(r+0.5);
+    if(Math.abs(dx)<0.8&&Math.abs(dy)<0.8){
+     G.grid[r][c]=T.AIR;G.collected++;
+     for(let i=0;i<12;i++)spawnP(c+0.5,r+0.5,'#fff',0.06);
+     for(let i=0;i<6;i++)spawnP(c+0.5,r+0.5,'#87CEEB',0.04);
+    }
+   }
+  }
+ }
+
+ // Sven mount
+ if(G.svenOn&&!G.svenRide){
+  let dx=G.px+PW/2-(G.svenX+0.5),dy=G.py+PH/2-(G.svenY+0.5);
+  if(Math.abs(dx)<1.2&&Math.abs(dy)<1.2){
+   G.svenRide=true;G.svenTimer=0;
+  }
+ }
+
+ // Ice power
+ if(iPress&&G.iceCD<=0&&!G.proj){
+  G.proj={x:G.px+PW/2,y:G.py+PH*0.4,vx:G.dir*0.25,vy:0};
+  G.iceCD=30;
+  for(let i=0;i<8;i++)spawnP(G.proj.x,G.proj.y,'#87CEEB',0.03);
+ }
+ iPress=false;
+ if(G.iceCD>0)G.iceCD--;
+
+ // Update projectile
+ if(G.proj){
+  G.proj.x+=G.proj.vx;G.proj.y+=G.proj.vy;
+  let pc=Math.floor(G.proj.x),pr=Math.floor(G.proj.y);
+  let hit=false;
+
+  // Freeze puddle
+  if(pc>=0&&pc<LW&&pr>=0&&pr<LH&&G.grid[pr][pc]===T.PUDDLE){
+   G.grid[pr][pc]=T.ICE;hit=true;
+   for(let i=0;i<12;i++)spawnP(pc+0.5,pr+0.5,'#B0E0E6',0.05);
+  }
+  // Bridge gap
+  if(pc>=0&&pc<LW&&pr>=0&&pr<LH&&G.grid[pr][pc]===T.GAP){
+   G.grid[pr][pc]=T.BRIDGE;hit=true;
+   for(let i=0;i<10;i++)spawnP(pc+0.5,pr+0.5,'#87CEEB',0.04);
+  }
+  // Blast drift
+  if(pc>=0&&pc<LW&&pr>=0&&pr<LH&&G.grid[pr][pc]===T.DRIFT){
+   G.grid[pr][pc]=T.AIR;hit=true;
+   for(let i=0;i<15;i++)spawnP(pc+0.5,pr+0.5,'#fff',0.06);
+  }
+  // Hit solid
+  if(pc>=0&&pc<LW&&pr>=0&&pr<LH&&(G.grid[pr][pc]===T.SOLID||G.grid[pr][pc]===T.DOOR)){
+   hit=true;
+   for(let i=0;i<6;i++)spawnP(G.proj.x,G.proj.y,'#88ccff',0.03);
+  }
+  // Push block with ice
+  for(let b of G.blocks){
+   if(Math.abs(G.proj.x-b.x-0.5)<0.8&&Math.abs(G.proj.y-b.y-0.5)<0.8){
+    tryPushBlock(b,Math.sign(G.proj.vx));hit=true;
+   }
+  }
+  // Out of bounds
+  if(pc<0||pc>=LW||pr<0||pr>=LH)hit=true;
+  if(G.proj.x<0||G.proj.x>LW||Math.abs(G.proj.x-(G.px+PW/2))>12)hit=true;
+  if(hit)G.proj=null;
+ }
+
+ // Finale (level 5 palace building)
+ if(G.level===4&&!G.fdone){
+  // Check if near exit area
+  let dx=G.px+PW/2-(G.exitX+0.5),dy=G.py+PH/2-(G.exitY+0.5);
+  if(Math.abs(dx)<2&&Math.abs(dy)<2){
+   G.finale=true;
+   if(K.i){
+    G.ftaps++;
+    spawnP(G.exitX+0.5+Math.random()*2-1,G.exitY-Math.random()*3,'#87CEEB',0.06);
+    spawnP(G.exitX+0.5+Math.random()*2-1,G.exitY-Math.random()*3,'#B0E0E6',0.05);
+   }
+   if(G.ftaps>60)G.fdone=true;
+  }
+ }
+
+ // Check exit
+ if(!G.svenRide){
+  let dx=G.px+PW/2-(G.exitX+0.5),dy=G.py+PH/2-(G.exitY+0.5);
+  let canExit=G.doors.length===0||G.doors.every(d=>d.open);
+  if(G.level===4)canExit=G.fdone;
+  if(Math.abs(dx)<0.9&&Math.abs(dy)<0.9&&canExit){
+   levelComplete();
+  }
+ }
+
+ // Olaf follow
+ let tdx=G.px-0.6-G.ox, tdy=G.py-G.oy;
+ G.ox+=tdx*0.04;G.oy+=tdy*0.06;
+ // Keep olaf grounded
+ if(G.oy+1<LH&&!solid(G.ox+0.3,G.oy+1))G.oy+=0.15;
+ if(G.oy+1>=0&&G.oy+1<LH&&solid(G.ox+0.3,G.oy+1))G.oy=Math.floor(G.oy+1)-1;
+
+ // Check switches
+ checkSwitches();
+
+ // Update particles
+ updateParticles();
+
+ // Camera
+ updateCamera();
+}
+
+function tryPushBlock(b,dir){
+ let nx=b.x+dir;
+ let r=Math.floor(b.y);
+ if(nx>=0&&nx<LW&&!solid(nx,r)){
+  b.x=nx;
+  for(let i=0;i<4;i++)spawnP(b.x+0.5,b.y+0.5,'#aae',0.03);
+  // Gravity for block
+  while(b.y+1<LH&&!solid(b.x+0.5,b.y+1))b.y++;
+ }
+}
+
+function checkSwitches(){
+ for(let s of G.switches)s.on=false;
+ for(let b of G.blocks){
+  for(let s of G.switches){
+   if(Math.floor(b.x)===s.x&&Math.floor(b.y)===s.y)s.on=true;
+  }
+ }
+ let allOn=G.switches.length>0&&G.switches.every(s=>s.on);
+ for(let d of G.doors){
+  if(allOn&&!d.open){
+   d.open=true;
+   G.grid[d.y][d.x]=T.AIR;
+   for(let i=0;i<15;i++)spawnP(d.x+0.5,d.y+0.5,'#ffd700',0.05);
+  }
+ }
+}
+
+function spawnP(x,y,col,sz){
+ G.particles.push({x,y,vx:(Math.random()-0.5)*0.08,vy:-Math.random()*0.06-0.02,
+  life:40+Math.random()*30,ml:70,color:col,size:sz});
+}
+
+function updateParticles(){
+ for(let i=G.particles.length-1;i>=0;i--){
+  let p=G.particles[i];
+  p.x+=p.vx;p.y+=p.vy;p.vy+=0.001;p.life--;
+  if(p.life<=0)G.particles.splice(i,1);
+ }
+}
+
+function updateCamera(){
+ let tx=G.px-W/TS/2+PW/2;
+ let ty=G.py-H/TS/2+PH/2;
+ G.cx+=(tx-G.cx)*0.08;
+ G.cy+=(ty-G.cy)*0.08;
+ // Clamp
+ let maxCx=LW-W/TS;
+ let maxCy=LH-H/TS;
+ if(G.cx<0)G.cx=0;if(G.cx>maxCx)G.cx=maxCx;
+ if(G.cy<-1)G.cy=-1;if(G.cy>maxCy)G.cy=maxCy;
+}
+
+// ── WORLD TO SCREEN ──
+function w2s(wx,wy){return {x:(wx-G.cx)*TS, y:(wy-G.cy)*TS};}
+
+// ── RENDERING ──
+function render(){
+ X.clearRect(0,0,W,H);
+
+ if(G.screen==='title')return drawTitle();
+ if(G.screen==='story')return drawStoryScreen();
+ if(G.screen==='transform')return drawTransform();
+ if(G.screen==='levelcomplete')return drawLevelComplete();
+ if(G.screen==='victory')return drawVictory();
+
+ drawBG();
+ drawTiles();
+ drawEntities();
+ drawSnowflakes();
+ drawOlaf();
+ if(G.svenOn||G.svenRide)drawSven();
+ drawElsa();
+ drawProj();
+ drawParticles();
+ drawWeatherSnow();
+ if(G.finale)drawFinale();
+ drawHUD();
+}
+
+// ── BACKGROUNDS ──
+function drawBG(){
+ let bg=LEVELS[G.level].bg;
+ let grd;
+
+ if(bg==='ballroom'){
+  grd=X.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#3a1a5e');grd.addColorStop(0.5,'#5a2a4e');grd.addColorStop(1,'#4a2040');
+  X.fillStyle=grd;X.fillRect(0,0,W,H);
+  // Chandeliers
+  for(let i=0;i<3;i++){
+   let cx=W*0.2+i*W*0.3-G.cx*TS*0.3;
+   drawChandelier(cx,40);
+  }
+  // Curtains
+  X.fillStyle='rgba(128,0,64,0.2)';
+  X.fillRect(0,0,80,H);X.fillRect(W-80,0,80,H);
+ }
+ else if(bg==='town'){
+  grd=X.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#1a2a5a');grd.addColorStop(0.4,'#2a3a6a');grd.addColorStop(1,'#1a2040');
+  X.fillStyle=grd;X.fillRect(0,0,W,H);
+  // Stars
+  X.fillStyle='#fff';
+  for(let i=0;i<30;i++){
+   let sx=(i*137.5+50)%W,sy=(i*73.1+20)%(H*0.3);
+   let tw=Math.sin(G.time*0.02+i)*0.5+1;
+   X.globalAlpha=tw*0.6;X.beginPath();X.arc(sx,sy,1.5,0,Math.PI*2);X.fill();
+  }
+  X.globalAlpha=1;
+  // Houses in background
+  for(let i=0;i<5;i++){
+   let hx=i*220-G.cx*TS*0.2+50;
+   let hy=H*0.5;
+   X.fillStyle='#2a2a4a';X.fillRect(hx,hy,100,120);
+   X.fillStyle='#3a3060';
+   X.beginPath();X.moveTo(hx-10,hy);X.lineTo(hx+50,hy-50);X.lineTo(hx+110,hy);X.fill();
+   X.fillStyle='rgba(255,200,100,0.5)';X.fillRect(hx+20,hy+30,25,25);X.fillRect(hx+60,hy+30,25,25);
+  }
+ }
+ else if(bg==='mountain'){
+  grd=X.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#0a1030');grd.addColorStop(0.3,'#1a2a5a');grd.addColorStop(1,'#2a3a50');
+  X.fillStyle=grd;X.fillRect(0,0,W,H);
+  // Moon
+  X.fillStyle='rgba(255,255,220,0.9)';X.beginPath();X.arc(W*0.8,80,40,0,Math.PI*2);X.fill();
+  X.fillStyle='rgba(255,255,200,0.1)';X.beginPath();X.arc(W*0.8,80,70,0,Math.PI*2);X.fill();
+  // Mountains bg
+  X.fillStyle='#1a2a4a';
+  X.beginPath();X.moveTo(-100,H*0.6);
+  X.lineTo(W*0.2,H*0.2);X.lineTo(W*0.4,H*0.5);X.lineTo(W*0.6,H*0.15);
+  X.lineTo(W*0.8,H*0.45);X.lineTo(W+100,H*0.3);X.lineTo(W+100,H);X.lineTo(-100,H);X.fill();
+  // Snow caps
+  X.fillStyle='rgba(255,255,255,0.3)';
+  X.beginPath();X.moveTo(W*0.17,H*0.23);X.lineTo(W*0.2,H*0.2);X.lineTo(W*0.23,H*0.23);X.fill();
+  X.beginPath();X.moveTo(W*0.57,H*0.18);X.lineTo(W*0.6,H*0.15);X.lineTo(W*0.63,H*0.18);X.fill();
+ }
+ else if(bg==='storm'){
+  grd=X.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#0a0a20');grd.addColorStop(0.5,'#1a1a3a');grd.addColorStop(1,'#0a0a1a');
+  X.fillStyle=grd;X.fillRect(0,0,W,H);
+  // Lightning flash
+  if(G.flash>0){
+   X.fillStyle=`rgba(200,200,255,${G.flash*0.04})`;X.fillRect(0,0,W,H);
+  }
+  // Dark clouds
+  for(let i=0;i<6;i++){
+   let cx=i*200-G.cx*TS*0.15+Math.sin(G.time*0.003+i)*30;
+   X.fillStyle='rgba(30,30,50,0.6)';
+   X.beginPath();X.arc(cx,60+i*15,80,0,Math.PI*2);X.fill();
+   X.beginPath();X.arc(cx+60,50+i*15,60,0,Math.PI*2);X.fill();
+  }
+ }
+ else if(bg==='palace'){
+  grd=X.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#0a1a4a');grd.addColorStop(0.3,'#1a3a7a');grd.addColorStop(1,'#0a2a5a');
+  X.fillStyle=grd;X.fillRect(0,0,W,H);
+  // Aurora borealis
+  X.globalAlpha=0.15;
+  for(let i=0;i<4;i++){
+   let ax=W*0.1+i*W*0.25+Math.sin(G.time*0.005+i*2)*60;
+   grd=X.createLinearGradient(ax,0,ax+100,H*0.4);
+   grd.addColorStop(0,'transparent');
+   grd.addColorStop(0.3,i%2===0?'#00ff88':'#8888ff');
+   grd.addColorStop(0.7,i%2===0?'#00aaff':'#ff88ff');
+   grd.addColorStop(1,'transparent');
+   X.fillStyle=grd;
+   X.beginPath();
+   X.moveTo(ax,0);
+   for(let j=0;j<=10;j++){
+    let py=j*H*0.04;
+    let px=ax+50+Math.sin(G.time*0.008+j*0.5+i)*40;
+    X.lineTo(px,py);
+   }
+   X.lineTo(ax+100,H*0.4);X.lineTo(ax,H*0.4);X.fill();
+  }
+  X.globalAlpha=1;
+ }
+}
+
+function drawChandelier(cx,cy){
+ X.strokeStyle='rgba(255,215,0,0.4)';X.lineWidth=2;
+ X.beginPath();X.moveTo(cx,0);X.lineTo(cx,cy);X.stroke();
+ // Candles
+ for(let i=-1;i<=1;i++){
+  let bx=cx+i*25;
+  X.fillStyle='rgba(255,215,0,0.6)';
+  X.beginPath();X.arc(bx,cy+5,6,0,Math.PI*2);X.fill();
+  // Glow
+  X.fillStyle='rgba(255,200,100,0.15)';
+  X.beginPath();X.arc(bx,cy+5,15,0,Math.PI*2);X.fill();
+  // Flame
+  let flicker=Math.sin(G.time*0.1+i*2)*2;
+  X.fillStyle='rgba(255,180,50,0.8)';
+  X.beginPath();X.arc(bx+flicker,cy-3,4,0,Math.PI*2);X.fill();
+ }
+}
+
+// ── DRAW TILES ──
+function drawTiles(){
+ let startC=Math.max(0,Math.floor(G.cx)-1);
+ let endC=Math.min(LW,Math.ceil(G.cx+W/TS)+1);
+ let startR=Math.max(0,Math.floor(G.cy)-1);
+ let endR=Math.min(LH,Math.ceil(G.cy+H/TS)+1);
+
+ for(let r=startR;r<endR;r++){
+  for(let c=startC;c<endC;c++){
+   let t=G.grid[r][c];
+   if(t===T.AIR)continue;
+   let p=w2s(c,r);
+   let tx=p.x,ty=p.y;
+
+   if(t===T.SOLID){
+    // Platform style based on level
+    let bg=LEVELS[G.level].bg;
+    if(bg==='ballroom'){
+     X.fillStyle='#6a4a3a';X.fillRect(tx,ty,TS+1,TS+1);
+     // Wood grain
+     X.strokeStyle='rgba(90,60,40,0.5)';X.lineWidth=1;
+     X.beginPath();X.moveTo(tx,ty+TS*0.3);X.lineTo(tx+TS,ty+TS*0.3);X.stroke();
+     X.beginPath();X.moveTo(tx,ty+TS*0.6);X.lineTo(tx+TS,ty+TS*0.6);X.stroke();
+     // Top edge
+     X.fillStyle='#8a6a5a';X.fillRect(tx,ty,TS+1,4);
+    } else if(bg==='town'){
+     X.fillStyle='#5a5a6a';X.fillRect(tx,ty,TS+1,TS+1);
+     // Cobblestone
+     X.strokeStyle='rgba(80,80,100,0.4)';X.lineWidth=1;
+     X.strokeRect(tx+2,ty+2,TS/2-2,TS/2-2);
+     X.strokeRect(tx+TS/2+1,ty+2,TS/2-2,TS/2-2);
+     X.strokeRect(tx+TS/4,ty+TS/2+1,TS/2-2,TS/2-2);
+     X.fillStyle='#7a7a8a';X.fillRect(tx,ty,TS+1,3);
+    } else if(bg==='mountain'||bg==='storm'){
+     X.fillStyle='#4a5a6a';X.fillRect(tx,ty,TS+1,TS+1);
+     X.fillStyle='rgba(255,255,255,0.15)';X.fillRect(tx,ty,TS+1,4);
+     // Snow on top
+     if(r>0&&G.grid[r-1][c]===T.AIR){
+      X.fillStyle='rgba(255,255,255,0.6)';
+      X.beginPath();X.moveTo(tx,ty);X.lineTo(tx+TS*0.3,ty-3);
+      X.lineTo(tx+TS*0.7,ty-2);X.lineTo(tx+TS,ty);X.fill();
+     }
+    } else if(bg==='palace'){
+     // Ice bricks
+     let grd=X.createLinearGradient(tx,ty,tx,ty+TS);
+     grd.addColorStop(0,'#4488bb');grd.addColorStop(1,'#336699');
+     X.fillStyle=grd;X.fillRect(tx,ty,TS+1,TS+1);
+     X.strokeStyle='rgba(100,180,220,0.3)';X.lineWidth=1;
+     X.strokeRect(tx+1,ty+1,TS-2,TS-2);
+     // Shimmer
+     X.fillStyle=`rgba(180,220,255,${Math.sin(G.time*0.03+c+r)*0.1+0.1})`;
+     X.fillRect(tx+3,ty+3,TS*0.3,TS*0.3);
+    }
+   }
+   else if(t===T.PUDDLE){
+    X.fillStyle='rgba(100,100,200,0.5)';
+    X.fillRect(tx+2,ty+TS*0.6,TS-4,TS*0.4);
+    // Ripples
+    X.strokeStyle='rgba(150,150,255,0.4)';X.lineWidth=1;
+    let rp=Math.sin(G.time*0.05+c)*3;
+    X.beginPath();X.arc(tx+TS/2+rp,ty+TS*0.8,TS*0.2,0,Math.PI);X.stroke();
+   }
+   else if(t===T.ICE){
+    let grd=X.createLinearGradient(tx,ty,tx+TS,ty+TS);
+    grd.addColorStop(0,'rgba(135,206,235,0.8)');grd.addColorStop(1,'rgba(176,224,230,0.6)');
+    X.fillStyle=grd;X.fillRect(tx,ty,TS+1,TS+1);
+    // Crystal pattern
+    X.strokeStyle='rgba(255,255,255,0.4)';X.lineWidth=1;
+    X.beginPath();X.moveTo(tx+TS/2,ty);X.lineTo(tx+TS/2,ty+TS);X.stroke();
+    X.beginPath();X.moveTo(tx,ty+TS/2);X.lineTo(tx+TS,ty+TS/2);X.stroke();
+    // Sparkle
+    let sp=Math.sin(G.time*0.1+c*2)*0.3+0.5;
+    X.fillStyle=`rgba(255,255,255,${sp})`;
+    X.beginPath();X.arc(tx+TS*0.3,ty+TS*0.3,3,0,Math.PI*2);X.fill();
+   }
+   else if(t===T.BRIDGE){
+    X.fillStyle='rgba(135,206,235,0.7)';X.fillRect(tx,ty,TS+1,TS+1);
+    X.fillStyle='rgba(255,255,255,0.2)';X.fillRect(tx,ty,TS+1,3);
+    // Snowflake emblem
+    drawMiniSnowflake(tx+TS/2,ty+TS/2,TS*0.25,'rgba(255,255,255,0.4)');
+   }
+   else if(t===T.GAP){
+    // Dark gap
+    X.fillStyle='rgba(0,0,0,0.3)';X.fillRect(tx,ty,TS+1,TS+1);
+    // Swirling mist
+    X.fillStyle=`rgba(100,100,150,${Math.sin(G.time*0.03+c)*0.15+0.15})`;
+    X.beginPath();X.arc(tx+TS/2,ty+TS*0.7,TS*0.3,0,Math.PI*2);X.fill();
+   }
+   else if(t===T.DRIFT){
+    // Snowdrift
+    X.fillStyle='#e8e8f0';
+    X.beginPath();X.moveTo(tx,ty+TS);X.lineTo(tx,ty+TS*0.3);
+    X.quadraticCurveTo(tx+TS/2,ty-TS*0.1,tx+TS,ty+TS*0.3);
+    X.lineTo(tx+TS,ty+TS);X.fill();
+    X.fillStyle='rgba(200,200,220,0.5)';
+    X.beginPath();X.arc(tx+TS*0.3,ty+TS*0.5,TS*0.15,0,Math.PI*2);X.fill();
+   }
+   else if(t===T.DOOR){
+    let dOpen=false;
+    for(let d of G.doors)if(d.x===c&&d.y===r)dOpen=d.open;
+    if(!dOpen){
+     X.fillStyle='#8B4513';X.fillRect(tx+TS*0.1,ty,TS*0.8,TS);
+     // Door frame
+     X.strokeStyle='#654321';X.lineWidth=3;
+     X.strokeRect(tx+TS*0.1,ty,TS*0.8,TS);
+     // Doorknob
+     X.fillStyle='#DAA520';X.beginPath();X.arc(tx+TS*0.7,ty+TS*0.55,4,0,Math.PI*2);X.fill();
+     // Lock indicator
+     X.fillStyle='rgba(255,0,0,0.5)';X.beginPath();X.arc(tx+TS*0.5,ty+TS*0.2,5,0,Math.PI*2);X.fill();
+    }
+   }
+  }
+ }
+}
+
+// ── DRAW ENTITIES ──
+function drawEntities(){
+ // Blocks
+ for(let b of G.blocks){
+  let p=w2s(b.x,b.y);
+  let grd=X.createLinearGradient(p.x,p.y,p.x,p.y+TS);
+  grd.addColorStop(0,'#6ab0d0');grd.addColorStop(1,'#4a90b0');
+  X.fillStyle=grd;X.fillRect(p.x+2,p.y+2,TS-4,TS-4);
+  // Crystal facets
+  X.strokeStyle='rgba(255,255,255,0.3)';X.lineWidth=1;
+  X.strokeRect(p.x+6,p.y+6,TS-12,TS-12);
+  // Sparkle
+  let sp=Math.sin(G.time*0.08+b.x)*0.3+0.5;
+  X.fillStyle=`rgba(255,255,255,${sp})`;
+  X.beginPath();X.arc(p.x+TS*0.3,p.y+TS*0.3,3,0,Math.PI*2);X.fill();
+ }
+
+ // Switches
+ for(let s of G.switches){
+  let p=w2s(s.x,s.y);
+  X.fillStyle=s.on?'#4CAF50':'#888';
+  X.fillRect(p.x+TS*0.15,p.y+TS*0.7,TS*0.7,TS*0.3);
+  // Button top
+  X.fillStyle=s.on?'#66BB6A':'#aaa';
+  X.beginPath();X.arc(p.x+TS*0.5,p.y+TS*0.7,TS*0.2,Math.PI,0);X.fill();
+  if(s.on){
+   X.fillStyle='rgba(100,255,100,0.3)';
+   X.beginPath();X.arc(p.x+TS*0.5,p.y+TS*0.5,TS*0.35,0,Math.PI*2);X.fill();
+  }
+ }
+
+ // Exit
+ let ep=w2s(G.exitX,G.exitY);
+ let canExit=G.doors.length===0||G.doors.every(d=>d.open);
+ if(G.level===4)canExit=G.fdone;
+ // Portal glow
+ let glow=Math.sin(G.time*0.06)*0.15+0.5;
+ X.fillStyle=canExit?`rgba(100,255,200,${glow})`:`rgba(100,100,100,${glow*0.5})`;
+ X.beginPath();X.arc(ep.x+TS*0.5,ep.y+TS*0.5,TS*0.5,0,Math.PI*2);X.fill();
+ // Inner
+ X.fillStyle=canExit?`rgba(150,255,220,${glow+0.2})`:'rgba(150,150,150,0.3)';
+ X.beginPath();X.arc(ep.x+TS*0.5,ep.y+TS*0.5,TS*0.3,0,Math.PI*2);X.fill();
+ // Sparkles around exit
+ if(canExit){
+  for(let i=0;i<4;i++){
+   let a=G.time*0.03+i*Math.PI/2;
+   let sx=ep.x+TS*0.5+Math.cos(a)*TS*0.45;
+   let sy=ep.y+TS*0.5+Math.sin(a)*TS*0.45;
+   X.fillStyle='rgba(255,255,255,0.7)';
+   X.beginPath();X.arc(sx,sy,2,0,Math.PI*2);X.fill();
+  }
+ }
+}
+
+// ── DRAW SNOWFLAKES ──
+function drawSnowflakes(){
+ for(let r=0;r<LH;r++){
+  for(let c=0;c<LW;c++){
+   if(G.grid[r][c]===T.SNOW){
+    let p=w2s(c+0.5,r+0.3);
+    let bob=Math.sin(G.time*0.04+c+r)*4;
+    let rot=G.time*0.02+c;
+    drawSnowflakeCrystal(p.x,p.y+bob,TS*0.28,rot);
+   }
+  }
+ }
+}
+
+function drawSnowflakeCrystal(cx,cy,size,rot){
+ X.save();X.translate(cx,cy);X.rotate(rot);
+ // Outer glow
+ X.fillStyle='rgba(135,206,235,0.2)';
+ X.beginPath();X.arc(0,0,size*1.4,0,Math.PI*2);X.fill();
+ // Arms
+ X.strokeStyle='#fff';X.lineWidth=2;X.lineCap='round';
+ for(let i=0;i<6;i++){
+  let a=i*Math.PI/3;
+  X.save();X.rotate(a);
+  X.beginPath();X.moveTo(0,0);X.lineTo(0,-size);X.stroke();
+  // Branches
+  X.beginPath();X.moveTo(0,-size*0.5);X.lineTo(-size*0.25,-size*0.7);X.stroke();
+  X.beginPath();X.moveTo(0,-size*0.5);X.lineTo(size*0.25,-size*0.7);X.stroke();
+  X.restore();
+ }
+ // Center dot
+ X.fillStyle='rgba(255,255,255,0.9)';
+ X.beginPath();X.arc(0,0,3,0,Math.PI*2);X.fill();
+ X.restore();
+}
+
+function drawMiniSnowflake(cx,cy,size,col){
+ X.save();X.translate(cx,cy);
+ X.strokeStyle=col;X.lineWidth=1;X.lineCap='round';
+ for(let i=0;i<6;i++){
+  let a=i*Math.PI/3;
+  X.beginPath();X.moveTo(0,0);
+  X.lineTo(Math.cos(a)*size,Math.sin(a)*size);X.stroke();
+ }
+ X.restore();
+}
+
+// ── DRAW ELSA ──
+function drawElsa(){
+ let p=w2s(G.px,G.py);
+ let s=TS*1.1; // Elsa is slightly bigger than a tile
+ let bob=Math.sin(G.breath)*2;
+ let walkBob=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle)*3:0;
+
+ let sx=p.x+TS*0.27, sy=p.y+TS*PH+bob+walkBob;
+
+ X.save();
+ X.translate(sx,sy);
+ if(G.dir<0)X.scale(-1,1);
+
+ let dCol=G.iceDress?'#87CEEB':'#008080';
+ let dHi=G.iceDress?'#B0E0E6':'#20B2AA';
+ let dDark=G.iceDress?'#5a9ab5':'#006060';
+
+ // Shadow
+ X.fillStyle='rgba(0,0,0,0.15)';
+ X.beginPath();X.ellipse(0,0,s*0.28,s*0.06,0,0,Math.PI*2);X.fill();
+
+ // Cape (coronation only)
+ if(!G.iceDress){
+  X.fillStyle='rgba(139,0,139,0.6)';
+  X.beginPath();X.moveTo(-s*0.05,-s*0.35);X.lineTo(-s*0.35,0);
+  X.lineTo(-s*0.25,-s*0.05);X.lineTo(-s*0.08,-s*0.3);X.fill();
+ }
+ // Ice dress trail
+ if(G.iceDress){
+  X.fillStyle='rgba(135,206,235,0.3)';
+  X.beginPath();X.moveTo(-s*0.2,-s*0.05);
+  X.quadraticCurveTo(-s*0.35,s*0.05,-s*0.4,-s*0.02);
+  X.lineTo(-s*0.25,-s*0.1);X.fill();
+ }
+
+ // Legs (walking animation)
+ let legAnim=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle):0;
+ X.fillStyle='#FFF0F0';
+ X.fillRect(-s*0.08+legAnim*s*0.03,-s*0.02,s*0.06,s*0.05);
+ X.fillRect(s*0.02-legAnim*s*0.03,-s*0.02,s*0.06,s*0.05);
+
+ // Feet
+ X.fillStyle=G.iceDress?'#6ab0d0':'#444';
+ X.beginPath();X.ellipse(-s*0.06+legAnim*s*0.03,s*0.02,s*0.055,s*0.025,0,0,Math.PI*2);X.fill();
+ X.beginPath();X.ellipse(s*0.06-legAnim*s*0.03,s*0.02,s*0.055,s*0.025,0,0,Math.PI*2);X.fill();
+
+ // Dress (A-line)
+ X.fillStyle=dCol;
+ X.beginPath();X.moveTo(-s*0.18,-s*0.32);X.lineTo(s*0.18,-s*0.32);
+ X.lineTo(s*0.26,-s*0.02);X.lineTo(-s*0.26,-s*0.02);X.fill();
+ // Dress gradient overlay
+ X.fillStyle=dHi;
+ X.beginPath();X.moveTo(-s*0.07,-s*0.30);X.lineTo(s*0.07,-s*0.30);
+ X.lineTo(s*0.1,-s*0.08);X.lineTo(-s*0.1,-s*0.08);X.fill();
+ // Dress bottom detail
+ X.fillStyle=dDark;
+ X.beginPath();X.moveTo(-s*0.25,-s*0.06);X.lineTo(s*0.25,-s*0.06);
+ X.lineTo(s*0.26,-s*0.02);X.lineTo(-s*0.26,-s*0.02);X.fill();
+
+ // Sparkles on ice dress
+ if(G.iceDress){
+  for(let i=0;i<4;i++){
+   let spx=(i%2===0?1:-1)*s*(0.05+i*0.04);
+   let spy=-s*(0.08+i*0.06);
+   let sp=Math.sin(G.time*0.08+i*1.5)*0.4+0.5;
+   X.fillStyle=`rgba(255,255,255,${sp})`;
+   X.beginPath();X.arc(spx,spy,2,0,Math.PI*2);X.fill();
+  }
+ }
+
+ // Torso
+ X.fillStyle=dCol;
+ X.fillRect(-s*0.13,-s*0.44,s*0.26,s*0.14);
+
+ // Skin - neck
+ X.fillStyle='#FFF0F0';
+ X.fillRect(-s*0.04,-s*0.50,s*0.08,s*0.08);
+
+ // Arms with animation
+ let armSwing=G.jumping&&G.vy<0?-1.3:-0.3+Math.sin(G.breath*2)*0.08;
+ let walkArm=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle)*0.4:0;
+ X.strokeStyle='#FFF0F0';X.lineWidth=s*0.065;X.lineCap='round';
+ // Right arm
+ X.beginPath();X.moveTo(s*0.14,-s*0.40);
+ X.lineTo(s*0.28,-s*0.40+Math.sin(armSwing+walkArm)*s*0.18);X.stroke();
+ // Left arm
+ X.beginPath();X.moveTo(-s*0.14,-s*0.40);
+ X.lineTo(-s*0.28,-s*0.40+Math.sin(armSwing-walkArm)*s*0.18);X.stroke();
+
+ // Gloves (ice dress only)
+ if(G.iceDress){
+  X.fillStyle='#87CEEB';
+  X.beginPath();X.arc(s*0.28,-s*0.40+Math.sin(armSwing+walkArm)*s*0.18,s*0.035,0,Math.PI*2);X.fill();
+  X.beginPath();X.arc(-s*0.28,-s*0.40+Math.sin(armSwing-walkArm)*s*0.18,s*0.035,0,Math.PI*2);X.fill();
+ }
+
+ // Head (big chibi style)
+ X.fillStyle='#FFF0F0';
+ X.beginPath();X.arc(0,-s*0.62,s*0.2,0,Math.PI*2);X.fill();
+
+ // Hair - platinum blonde
+ X.fillStyle='#E8E0C8';
+ X.beginPath();X.arc(0,-s*0.66,s*0.22,Math.PI+0.2,Math.PI*2-0.2);X.fill();
+ // Hair side locks
+ X.fillStyle='#E8E0C8';
+ X.beginPath();X.ellipse(-s*0.17,-s*0.56,s*0.07,s*0.12,-0.2,0,Math.PI*2);X.fill();
+ X.beginPath();X.ellipse(s*0.14,-s*0.56,s*0.05,s*0.08,0.2,0,Math.PI*2);X.fill();
+ // Hair highlight
+ X.fillStyle='#F5F0E0';
+ X.beginPath();X.arc(s*0.04,-s*0.72,s*0.08,0,Math.PI*2);X.fill();
+
+ // Braid (hanging over shoulder)
+ for(let i=0;i<6;i++){
+  let bx=-s*0.14-i*s*0.02;
+  let by=-s*0.44+i*s*0.06;
+  let bs=s*0.04-i*0.003;
+  X.fillStyle=i%2===0?'#E8E0C8':'#F5F0E0';
+  X.beginPath();X.arc(bx,by,bs,0,Math.PI*2);X.fill();
+ }
+ // Braid tie
+ X.fillStyle=G.iceDress?'#87CEEB':'#DAA520';
+ X.beginPath();X.arc(-s*0.14-6*s*0.02,-s*0.44+6*s*0.06,s*0.025,0,Math.PI*2);X.fill();
+
+ // Tiara/crown
+ if(!G.iceDress){
+  X.fillStyle='#DAA520';
+  X.beginPath();X.moveTo(-s*0.08,-s*0.80);X.lineTo(-s*0.06,-s*0.87);
+  X.lineTo(-s*0.02,-s*0.82);X.lineTo(s*0.02,-s*0.89);
+  X.lineTo(s*0.06,-s*0.82);X.lineTo(s*0.08,-s*0.86);
+  X.lineTo(s*0.10,-s*0.80);X.fill();
+  // Gem
+  X.fillStyle='#00CED1';
+  X.beginPath();X.arc(s*0.02,-s*0.84,s*0.02,0,Math.PI*2);X.fill();
+ } else {
+  // Ice tiara
+  X.fillStyle='rgba(135,206,235,0.8)';
+  X.beginPath();X.moveTo(-s*0.07,-s*0.80);X.lineTo(0,-s*0.90);X.lineTo(s*0.07,-s*0.80);X.fill();
+  X.fillStyle='rgba(255,255,255,0.6)';
+  X.beginPath();X.arc(0,-s*0.85,s*0.02,0,Math.PI*2);X.fill();
+ }
+
+ // Eyes - big anime style
+ X.fillStyle='#fff';
+ X.beginPath();X.ellipse(-s*0.08,-s*0.63,s*0.055,s*0.042,0,0,Math.PI*2);X.fill();
+ X.beginPath();X.ellipse(s*0.08,-s*0.63,s*0.055,s*0.042,0,0,Math.PI*2);X.fill();
+ // Iris - royal blue
+ X.fillStyle='#4169E1';
+ X.beginPath();X.arc(-s*0.075+(G.dir>0?s*0.01:0),-s*0.63,s*0.035,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.075+(G.dir>0?s*0.01:0),-s*0.63,s*0.035,0,Math.PI*2);X.fill();
+ // Pupil
+ X.fillStyle='#1a1a4a';
+ X.beginPath();X.arc(-s*0.075+(G.dir>0?s*0.01:0),-s*0.63,s*0.02,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.075+(G.dir>0?s*0.01:0),-s*0.63,s*0.02,0,Math.PI*2);X.fill();
+ // Eye shine
+ X.fillStyle='#fff';
+ X.beginPath();X.arc(-s*0.065,-s*0.645,s*0.012,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.085,-s*0.645,s*0.012,0,Math.PI*2);X.fill();
+
+ // Eyebrows
+ X.strokeStyle='#c8b898';X.lineWidth=2;
+ X.beginPath();X.moveTo(-s*0.11,-s*0.69);X.lineTo(-s*0.04,-s*0.70);X.stroke();
+ X.beginPath();X.moveTo(s*0.04,-s*0.70);X.lineTo(s*0.11,-s*0.69);X.stroke();
+
+ // Eyelashes
+ X.strokeStyle='#8a7a6a';X.lineWidth=1;
+ X.beginPath();X.moveTo(-s*0.12,-s*0.66);X.lineTo(-s*0.14,-s*0.68);X.stroke();
+ X.beginPath();X.moveTo(s*0.12,-s*0.66);X.lineTo(s*0.14,-s*0.68);X.stroke();
+
+ // Rosy cheeks
+ X.fillStyle='rgba(255,150,150,0.3)';
+ X.beginPath();X.arc(-s*0.12,-s*0.58,s*0.035,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.12,-s*0.58,s*0.035,0,Math.PI*2);X.fill();
+
+ // Nose (tiny)
+ X.fillStyle='rgba(255,200,200,0.4)';
+ X.beginPath();X.arc(s*0.01,-s*0.59,s*0.015,0,Math.PI*2);X.fill();
+
+ // Smile
+ X.strokeStyle='#d09090';X.lineWidth=1.5;
+ X.beginPath();X.arc(0,-s*0.55,s*0.05,0.2,Math.PI-0.2);X.stroke();
+
+ X.restore();
+
+ // Ice power ready indicator
+ if(G.iceCD<=0&&G.screen==='playing'){
+  let glo=Math.sin(G.time*0.1)*0.2+0.3;
+  X.fillStyle=`rgba(135,206,235,${glo})`;
+  X.beginPath();X.arc(sx+(G.dir>0?s*0.3:-s*0.3),sy-s*0.4,5,0,Math.PI*2);X.fill();
+ }
+}
+
+// ── DRAW OLAF ──
+function drawOlaf(){
+ let p=w2s(G.ox,G.oy);
+ let s=TS*0.75;
+ let bob=Math.sin(G.breath*1.3+1)*3;
+ let wobble=Math.sin(G.breath*2.2)*0.06;
+ let ox=p.x+TS*0.35,oy=p.y+TS*0.95+bob;
+
+ X.save();X.translate(ox,oy);X.rotate(wobble);
+
+ // Shadow
+ X.fillStyle='rgba(0,0,0,0.1)';
+ X.beginPath();X.ellipse(0,s*0.02,s*0.2,s*0.04,0,0,Math.PI*2);X.fill();
+
+ // Bottom snowball
+ X.fillStyle='#fff';X.beginPath();X.arc(0,-s*0.12,s*0.24,0,Math.PI*2);X.fill();
+ X.fillStyle='rgba(220,220,240,0.3)';X.beginPath();X.arc(s*0.06,-s*0.08,s*0.12,0,Math.PI*2);X.fill();
+ // Middle snowball
+ X.fillStyle='#fff';X.beginPath();X.arc(0,-s*0.42,s*0.18,0,Math.PI*2);X.fill();
+ // Head
+ X.fillStyle='#fff';X.beginPath();X.arc(0,-s*0.68,s*0.16,0,Math.PI*2);X.fill();
+
+ // Carrot nose
+ X.fillStyle='#FF8C00';
+ X.beginPath();X.moveTo(s*0.1,-s*0.70);X.lineTo(s*0.32,-s*0.68);X.lineTo(s*0.1,-s*0.66);X.fill();
+ // Nose highlight
+ X.fillStyle='rgba(255,180,100,0.5)';
+ X.beginPath();X.moveTo(s*0.12,-s*0.695);X.lineTo(s*0.22,-s*0.685);X.lineTo(s*0.12,-s*0.675);X.fill();
+
+ // Eyes
+ X.fillStyle='#1a1a1a';
+ X.beginPath();X.arc(-s*0.06,-s*0.74,s*0.03,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.06,-s*0.74,s*0.03,0,Math.PI*2);X.fill();
+ // Eye shine
+ X.fillStyle='#fff';
+ X.beginPath();X.arc(-s*0.05,-s*0.75,s*0.012,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.07,-s*0.75,s*0.012,0,Math.PI*2);X.fill();
+
+ // Smile (dots)
+ X.fillStyle='#1a1a1a';
+ for(let i=0;i<5;i++){
+  let a=-0.5+i*0.3;
+  X.beginPath();X.arc(Math.sin(a)*s*0.09,-s*0.61+Math.cos(a)*s*0.02,s*0.015,0,Math.PI*2);X.fill();
+ }
+
+ // Stick arms
+ X.strokeStyle='#8B4513';X.lineWidth=3;X.lineCap='round';
+ let armW=Math.sin(G.time*0.04)*0.15;
+ X.beginPath();X.moveTo(-s*0.16,-s*0.45);X.lineTo(-s*0.38,-s*0.55+Math.sin(armW)*s*0.05);X.stroke();
+ X.beginPath();X.moveTo(-s*0.38,-s*0.55+Math.sin(armW)*s*0.05);X.lineTo(-s*0.44,-s*0.65);X.stroke();
+ X.beginPath();X.moveTo(-s*0.38,-s*0.55+Math.sin(armW)*s*0.05);X.lineTo(-s*0.48,-s*0.52);X.stroke();
+ X.beginPath();X.moveTo(s*0.16,-s*0.45);X.lineTo(s*0.38,-s*0.55-Math.sin(armW)*s*0.05);X.stroke();
+ X.beginPath();X.moveTo(s*0.38,-s*0.55-Math.sin(armW)*s*0.05);X.lineTo(s*0.44,-s*0.65);X.stroke();
+
+ // Buttons
+ X.fillStyle='#2a2a2a';
+ X.beginPath();X.arc(0,-s*0.32,s*0.035,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(0,-s*0.42,s*0.035,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(0,-s*0.52,s*0.03,0,Math.PI*2);X.fill();
+
+ // Hair (3 twigs on top)
+ X.strokeStyle='#5a3a1a';X.lineWidth=2;
+ X.beginPath();X.moveTo(-s*0.02,-s*0.82);X.lineTo(-s*0.06,-s*0.96);X.stroke();
+ X.beginPath();X.moveTo(s*0.03,-s*0.82);X.lineTo(s*0.07,-s*0.97);X.stroke();
+ X.beginPath();X.moveTo(0,-s*0.83);X.lineTo(0,-s*0.99);X.stroke();
+
+ X.restore();
+}
+
+// ── DRAW SVEN ──
+function drawSven(){
+ if(!G.svenOn&&!G.svenRide)return;
+ let p=w2s(G.svenX,G.svenY);
+ let ox=p.x+TS*0.5,oy=p.y+TS*0.95;
+ let s=TS*0.9;
+
+ X.save();X.translate(ox,oy);
+
+ // Shadow
+ X.fillStyle='rgba(0,0,0,0.12)';
+ X.beginPath();X.ellipse(0,s*0.02,s*0.35,s*0.05,0,0,Math.PI*2);X.fill();
+
+ // Body
+ X.fillStyle='#7a4015';
+ X.beginPath();X.ellipse(0,-s*0.35,s*0.4,s*0.22,0,0,Math.PI*2);X.fill();
+ // Belly
+ X.fillStyle='#9a6030';
+ X.beginPath();X.ellipse(0,-s*0.30,s*0.28,s*0.14,0,0,Math.PI*2);X.fill();
+
+ // Legs with walking animation
+ X.fillStyle='#5a3010';
+ let legA=G.svenRide?Math.sin(G.time*0.1)*4:0;
+ X.fillRect(-s*0.30,-s*0.15+legA,s*0.09,s*0.16);
+ X.fillRect(-s*0.10,-s*0.15-legA,s*0.09,s*0.16);
+ X.fillRect(s*0.10,-s*0.15+legA,s*0.09,s*0.16);
+ X.fillRect(s*0.24,-s*0.15-legA,s*0.09,s*0.16);
+ // Hooves
+ X.fillStyle='#3a2008';
+ for(let i=0;i<4;i++){
+  let hx=[-s*0.31,-s*0.11,s*0.09,s*0.23][i];
+  let hy=i%2===0?legA:-legA;
+  X.fillRect(hx,s*0.01+hy,s*0.11,s*0.03);
+ }
+
+ // Neck
+ X.fillStyle='#7a4015';
+ X.beginPath();X.moveTo(s*0.30,-s*0.42);X.lineTo(s*0.45,-s*0.68);
+ X.lineTo(s*0.35,-s*0.68);X.lineTo(s*0.22,-s*0.48);X.fill();
+
+ // Head
+ X.fillStyle='#7a4015';
+ X.beginPath();X.ellipse(s*0.42,-s*0.73,s*0.18,s*0.13,0.25,0,Math.PI*2);X.fill();
+
+ // Muzzle
+ X.fillStyle='#9a5a20';
+ X.beginPath();X.ellipse(s*0.57,-s*0.68,s*0.07,s*0.05,0.2,0,Math.PI*2);X.fill();
+
+ // Antlers
+ X.strokeStyle='#A0522D';X.lineWidth=3;X.lineCap='round';
+ X.beginPath();X.moveTo(s*0.34,-s*0.82);X.lineTo(s*0.24,-s*0.98);X.lineTo(s*0.18,-s*1.01);X.stroke();
+ X.beginPath();X.moveTo(s*0.24,-s*0.98);X.lineTo(s*0.27,-s*1.05);X.stroke();
+ X.beginPath();X.moveTo(s*0.44,-s*0.82);X.lineTo(s*0.54,-s*0.98);X.lineTo(s*0.60,-s*1.01);X.stroke();
+ X.beginPath();X.moveTo(s*0.54,-s*0.98);X.lineTo(s*0.50,-s*1.05);X.stroke();
+
+ // Eye
+ X.fillStyle='#1a1a1a';X.beginPath();X.arc(s*0.50,-s*0.76,s*0.035,0,Math.PI*2);X.fill();
+ X.fillStyle='#fff';X.beginPath();X.arc(s*0.51,-s*0.77,s*0.015,0,Math.PI*2);X.fill();
+
+ // Nose
+ X.fillStyle='#3a2008';X.beginPath();X.arc(s*0.62,-s*0.66,s*0.025,0,Math.PI*2);X.fill();
+
+ // Tail
+ X.strokeStyle='#5a3010';X.lineWidth=3;
+ X.beginPath();X.moveTo(-s*0.38,-s*0.40);X.lineTo(-s*0.45,-s*0.48);X.stroke();
+
+ X.restore();
+}
+
+// ── DRAW PROJECTILE ──
+function drawProj(){
+ if(!G.proj)return;
+ let p=w2s(G.proj.x,G.proj.y);
+ // Outer glow
+ let glow=Math.sin(G.time*0.15)*0.2+0.8;
+ X.fillStyle=`rgba(135,206,235,${glow*0.3})`;
+ X.beginPath();X.arc(p.x,p.y,TS*0.25,0,Math.PI*2);X.fill();
+ // Inner
+ X.fillStyle=`rgba(200,230,255,${glow})`;
+ X.beginPath();X.arc(p.x,p.y,TS*0.14,0,Math.PI*2);X.fill();
+ // Core
+ X.fillStyle='#fff';
+ X.beginPath();X.arc(p.x,p.y,TS*0.06,0,Math.PI*2);X.fill();
+ // Mini snowflake
+ drawMiniSnowflake(p.x,p.y,TS*0.1,'rgba(255,255,255,0.6)');
+}
+
+// ── DRAW PARTICLES ──
+function drawParticles(){
+ for(let p of G.particles){
+  let sp=w2s(p.x,p.y);
+  X.globalAlpha=p.life/p.ml;
+  X.fillStyle=p.color;
+  X.beginPath();X.arc(sp.x,sp.y,p.size*TS*1.2,0,Math.PI*2);X.fill();
+ }
+ X.globalAlpha=1;
+}
+
+// ── WEATHER SNOW ──
+function drawWeatherSnow(){
+ let bg=LEVELS[G.level].bg;
+ if(bg==='ballroom')return; // Indoor, no snow
+
+ let intensity=bg==='storm'?1.5:0.8;
+ X.fillStyle='rgba(255,255,255,0.7)';
+ for(let s of G.wsnow){
+  s.x+=s.vx+(bg==='storm'?0.03:0);
+  s.y+=s.vy*intensity;
+  if(s.y>LH){s.y=0;s.x=Math.random()*LW;}
+  if(s.x>LW)s.x=0;if(s.x<0)s.x=LW;
+  let p=w2s(s.x,s.y);
+  if(p.x>-10&&p.x<W+10&&p.y>-10&&p.y<H+10){
+   X.beginPath();X.arc(p.x,p.y,s.s,0,Math.PI*2);X.fill();
+  }
+ }
+}
+
+// ── FINALE ──
+function drawFinale(){
+ if(!G.finale)return;
+ let ep=w2s(G.exitX,G.exitY);
+ let progress=Math.min(G.ftaps/60,1);
+
+ // Palace building
+ let palH=progress*TS*4;
+ let palW=TS*3;
+ let bx=ep.x-TS*0.5, by=ep.y+TS-palH;
+
+ if(progress>0.1){
+  // Base
+  let grd=X.createLinearGradient(bx,by+palH,bx,by);
+  grd.addColorStop(0,'rgba(100,180,220,0.8)');grd.addColorStop(1,'rgba(180,220,255,0.6)');
+  X.fillStyle=grd;X.fillRect(bx,by,palW,palH);
+
+  if(progress>0.3){
+   // Towers
+   X.fillStyle='rgba(120,190,230,0.7)';
+   X.fillRect(bx-TS*0.3,by+palH*0.3,TS*0.6,palH*0.7);
+   X.fillRect(bx+palW-TS*0.3,by+palH*0.3,TS*0.6,palH*0.7);
+  }
+  if(progress>0.5){
+   // Spires
+   X.fillStyle='rgba(150,210,240,0.8)';
+   X.beginPath();X.moveTo(bx+palW/2-TS*0.1,by);X.lineTo(bx+palW/2,by-TS*0.8);
+   X.lineTo(bx+palW/2+TS*0.1,by);X.fill();
+  }
+  if(progress>0.7){
+   // Windows
+   X.fillStyle='rgba(255,255,255,0.4)';
+   X.fillRect(bx+palW*0.2,by+palH*0.4,TS*0.4,TS*0.5);
+   X.fillRect(bx+palW*0.55,by+palH*0.4,TS*0.4,TS*0.5);
+   // Door
+   X.fillStyle='rgba(200,230,255,0.5)';
+   X.beginPath();X.arc(bx+palW/2,by+palH-TS*0.3,TS*0.3,Math.PI,0);X.fill();
+   X.fillRect(bx+palW/2-TS*0.3,by+palH-TS*0.3,TS*0.6,TS*0.3);
+  }
+  if(progress>=1){
+   // Sparkles
+   for(let i=0;i<8;i++){
+    let a=G.time*0.02+i*Math.PI/4;
+    let sx=bx+palW/2+Math.cos(a)*(palW/2+20);
+    let sy=by-20+Math.sin(a)*30;
+    let sp=Math.sin(G.time*0.08+i)*0.4+0.6;
+    X.fillStyle=`rgba(255,255,255,${sp})`;
+    X.beginPath();X.arc(sx,sy,3,0,Math.PI*2);X.fill();
+   }
+  }
+ }
+
+ // Instructions
+ if(!G.fdone){
+  X.fillStyle='rgba(0,0,0,0.5)';
+  X.fillRect(W/2-150,20,300,40);
+  X.fillStyle='#87CEEB';X.font='bold 18px sans-serif';X.textAlign='center';
+  X.fillText(`Tap ICE to build! ${Math.floor(progress*100)}%`,W/2,46);
+ }
+}
+
+// ── HUD ──
+function drawHUD(){
+ // Level name
+ X.fillStyle='rgba(0,0,0,0.4)';
+ X.fillRect(0,0,W,36);
+ X.fillStyle='#fff';X.font='bold 16px sans-serif';X.textAlign='left';
+ X.fillText(`${G.level+1}. ${LEVELS[G.level].name}`,12,24);
+
+ // Snowflake counter
+ X.textAlign='right';
+ X.fillStyle='#87CEEB';
+ drawMiniSnowflake(W-80,18,10,'#87CEEB');
+ X.fillStyle='#fff';X.font='bold 18px sans-serif';
+ X.fillText(`${G.collected}/${G.total}`,W-12,24);
+
+ // Hint
+ if(G.hintText&&G.hintTimer<180){
+  let alpha=G.hintTimer<150?0.8:(180-G.hintTimer)/30*0.8;
+  X.fillStyle=`rgba(0,0,0,${alpha*0.5})`;
+  X.fillRect(W/2-180,H-100,360,36);
+  X.fillStyle=`rgba(255,255,255,${alpha})`;X.font='15px sans-serif';X.textAlign='center';
+  X.fillText(G.hintText,W/2,H-77);
+ }
+
+ // Ice cooldown indicator
+ if(G.iceCD>0){
+  let pct=G.iceCD/30;
+  X.fillStyle='rgba(0,0,0,0.3)';
+  X.fillRect(W-52,42,40,6);
+  X.fillStyle='#87CEEB';
+  X.fillRect(W-52,42,40*(1-pct),6);
+ }
+}
+
+// ── TITLE SCREEN ──
+function drawTitle(){
+ // Background
+ let grd=X.createLinearGradient(0,0,0,H);
+ grd.addColorStop(0,'#0a1030');grd.addColorStop(0.4,'#1a2a5a');grd.addColorStop(1,'#2a3a6a');
+ X.fillStyle=grd;X.fillRect(0,0,W,H);
+
+ // Stars
+ for(let i=0;i<50;i++){
+  let sx=(i*137.5+50)%W,sy=(i*73.1+20)%(H*0.5);
+  let tw=Math.sin(G.time*0.02+i)*0.5+0.8;
+  X.fillStyle=`rgba(255,255,255,${tw*0.7})`;
+  X.beginPath();X.arc(sx,sy,1.5,0,Math.PI*2);X.fill();
+ }
+
+ // Moon
+ X.fillStyle='rgba(255,255,220,0.8)';X.beginPath();X.arc(W*0.8,H*0.15,50,0,Math.PI*2);X.fill();
+ X.fillStyle='rgba(255,255,200,0.1)';X.beginPath();X.arc(W*0.8,H*0.15,80,0,Math.PI*2);X.fill();
+
+ // Mountains silhouette
+ X.fillStyle='#1a2a4a';
+ X.beginPath();X.moveTo(0,H*0.6);
+ X.lineTo(W*0.15,H*0.3);X.lineTo(W*0.3,H*0.5);X.lineTo(W*0.5,H*0.25);
+ X.lineTo(W*0.7,H*0.45);X.lineTo(W*0.85,H*0.3);X.lineTo(W,H*0.4);
+ X.lineTo(W,H);X.lineTo(0,H);X.fill();
+ // Snow on peaks
+ X.fillStyle='rgba(255,255,255,0.4)';
+ X.beginPath();X.moveTo(W*0.47,H*0.28);X.lineTo(W*0.5,H*0.25);X.lineTo(W*0.53,H*0.28);X.fill();
+ X.beginPath();X.moveTo(W*0.82,H*0.33);X.lineTo(W*0.85,H*0.3);X.lineTo(W*0.88,H*0.33);X.fill();
+
+ // Ground snow
+ X.fillStyle='#c8d8e8';
+ X.beginPath();X.moveTo(0,H*0.75);
+ for(let i=0;i<=20;i++){
+  let px=i*W/20;
+  let py=H*0.75+Math.sin(i*0.8)*15;
+  X.lineTo(px,py);
+ }
+ X.lineTo(W,H);X.lineTo(0,H);X.fill();
+
+ // Snowflakes falling
+ X.fillStyle='rgba(255,255,255,0.6)';
+ for(let i=0;i<30;i++){
+  let fx=(i*97+G.time*0.3*(1+i%3*0.2))%W;
+  let fy=(i*61+G.time*0.5*(1+i%2*0.3))%(H*0.7);
+  X.beginPath();X.arc(fx,fy,1.5+i%3,0,Math.PI*2);X.fill();
+ }
+
+ // Big decorative snowflake
+ let pulse=Math.sin(G.time*0.03)*0.1+1;
+ drawSnowflakeCrystal(W/2,H*0.28,60*pulse,G.time*0.005);
+
+ // Title
+ X.fillStyle='rgba(0,0,0,0.3)';
+ X.font=`bold ${Math.min(W*0.06,48)}px sans-serif`;X.textAlign='center';
+ X.fillText("Elsa's Frozen Adventure",W/2+2,H*0.48+2);
+ X.fillStyle='#fff';
+ X.fillText("Elsa's Frozen Adventure",W/2,H*0.48);
+
+ // Subtitle
+ X.fillStyle='#87CEEB';X.font=`${Math.min(W*0.03,22)}px sans-serif`;
+ X.fillText("A magical journey for Anna",W/2,H*0.54);
+
+ // Prompt
+ let blink=Math.sin(G.time*0.06)*0.3+0.7;
+ X.fillStyle=`rgba(255,255,255,${blink})`;X.font='20px sans-serif';
+ X.fillText("Tap or press any key to start",W/2,H*0.68);
+
+ G.time++;
+}
+
+// ── STORY SCREEN ──
+function drawStoryScreen(){
+ // Dark bg
+ X.fillStyle='rgba(10,10,30,0.95)';X.fillRect(0,0,W,H);
+
+ // Story text
+ let lines=G.storyText.split('\n');
+ X.fillStyle='#fff';X.font='22px sans-serif';X.textAlign='center';
+ for(let i=0;i<lines.length;i++){
+  X.fillText(lines[i],W/2,H*0.3+i*36);
+ }
+
+ // Small character: Anna (for story context)
+ if(G.storyLv===0){
+  drawAnnaSmall(W/2,H*0.65);
+ }
+
+ // Continue prompt
+ let blink=Math.sin(G.time*0.06)*0.3+0.7;
+ X.fillStyle=`rgba(200,200,255,${blink})`;X.font='16px sans-serif';
+ X.fillText("Tap to continue...",W/2,H*0.85);
+
+ G.time++;
+}
+
+function drawAnnaSmall(cx,cy){
+ let s=60;
+ X.save();X.translate(cx,cy);
+
+ // Dress (green)
+ X.fillStyle='#2E8B57';
+ X.beginPath();X.moveTo(-s*0.3,-s*0.3);X.lineTo(s*0.3,-s*0.3);
+ X.lineTo(s*0.4,s*0.1);X.lineTo(-s*0.4,s*0.1);X.fill();
+ // Bodice
+ X.fillStyle='#1a6040';
+ X.fillRect(-s*0.2,-s*0.5,s*0.4,s*0.22);
+
+ // Head
+ X.fillStyle='#FFF0F0';
+ X.beginPath();X.arc(0,-s*0.65,s*0.25,0,Math.PI*2);X.fill();
+
+ // Red hair
+ X.fillStyle='#CC4400';
+ X.beginPath();X.arc(0,-s*0.7,s*0.27,Math.PI+0.3,Math.PI*2-0.3);X.fill();
+ // Braids (two)
+ for(let side of[-1,1]){
+  for(let i=0;i<4;i++){
+   X.fillStyle=i%2===0?'#CC4400':'#DD5500';
+   X.beginPath();X.arc(side*s*0.22,-s*0.45+i*s*0.08,s*0.04,0,Math.PI*2);X.fill();
+  }
+ }
+ // White streak
+ X.fillStyle='#fff';
+ X.beginPath();X.arc(-s*0.1,-s*0.78,s*0.06,0,Math.PI*2);X.fill();
+
+ // Eyes
+ X.fillStyle='#fff';
+ X.beginPath();X.ellipse(-s*0.09,-s*0.67,s*0.06,s*0.04,0,0,Math.PI*2);X.fill();
+ X.beginPath();X.ellipse(s*0.09,-s*0.67,s*0.06,s*0.04,0,0,Math.PI*2);X.fill();
+ X.fillStyle='#2E8B57';
+ X.beginPath();X.arc(-s*0.08,-s*0.67,s*0.03,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.08,-s*0.67,s*0.03,0,Math.PI*2);X.fill();
+
+ // Cheeks & smile
+ X.fillStyle='rgba(255,150,150,0.3)';
+ X.beginPath();X.arc(-s*0.15,-s*0.58,s*0.04,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(s*0.15,-s*0.58,s*0.04,0,Math.PI*2);X.fill();
+ X.strokeStyle='#d09090';X.lineWidth=1.5;
+ X.beginPath();X.arc(0,-s*0.56,s*0.06,0.2,Math.PI-0.2);X.stroke();
+
+ X.restore();
+}
+
+// ── TRANSFORMATION SCREEN ──
+function drawTransform(){
+ G.transT++;G.time++;
+ let t=G.transT;
+
+ // Dark bg
+ X.fillStyle='rgba(10,10,30,0.95)';X.fillRect(0,0,W,H);
+
+ // Swirling magic
+ X.globalAlpha=Math.min(t/60,1);
+ for(let i=0;i<20;i++){
+  let a=t*0.02+i*Math.PI*2/20;
+  let r=80+Math.sin(t*0.03+i)*40;
+  let sx=W/2+Math.cos(a)*r;
+  let sy=H/2+Math.sin(a)*r-50;
+  X.fillStyle=`rgba(135,206,235,${0.3+Math.sin(t*0.05+i)*0.2})`;
+  X.beginPath();X.arc(sx,sy,4+Math.sin(t*0.08+i)*2,0,Math.PI*2);X.fill();
+ }
+ X.globalAlpha=1;
+
+ // Dress transition text
+ X.fillStyle='#87CEEB';X.font='bold 24px sans-serif';X.textAlign='center';
+ if(t<60) X.fillText("The cold never bothered me anyway...",W/2,H*0.25);
+ else if(t<120) X.fillText("Elsa transforms into her ice dress!",W/2,H*0.25);
+ else X.fillText("Tap to continue...",W/2,H*0.25);
+
+ // Elsa silhouette with dress change
+ let cy=H/2;
+ let es=120;
+ X.save();X.translate(W/2,cy);
+
+ // Dress (morphing from teal to ice blue)
+ let morph=Math.min(t/90,1);
+ let dR=0+(135-0)*morph, dG=128+(206-128)*morph, dB=128+(235-128)*morph;
+ X.fillStyle=`rgb(${dR},${dG},${dB})`;
+ X.beginPath();X.moveTo(-es*0.25,-es*0.3);X.lineTo(es*0.25,-es*0.3);
+ X.lineTo(es*0.35,es*0.3);X.lineTo(-es*0.35,es*0.3);X.fill();
+
+ // Body
+ X.fillStyle=`rgb(${dR},${dG},${dB})`;
+ X.fillRect(-es*0.15,-es*0.5,es*0.3,es*0.22);
+
+ // Head
+ X.fillStyle='#FFF0F0';
+ X.beginPath();X.arc(0,-es*0.65,es*0.23,0,Math.PI*2);X.fill();
+
+ // Hair
+ X.fillStyle='#E8E0C8';
+ X.beginPath();X.arc(0,-es*0.7,es*0.25,Math.PI+0.2,Math.PI*2-0.2);X.fill();
+
+ // Eyes
+ X.fillStyle='#4169E1';
+ X.beginPath();X.arc(-es*0.08,-es*0.66,es*0.04,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(es*0.08,-es*0.66,es*0.04,0,Math.PI*2);X.fill();
+
+ // Smile
+ X.strokeStyle='#d09090';X.lineWidth=2;
+ X.beginPath();X.arc(0,-es*0.56,es*0.06,0.2,Math.PI-0.2);X.stroke();
+
+ // Sparkles on dress
+ if(morph>0.5){
+  for(let i=0;i<8;i++){
+   let sp=Math.sin(t*0.08+i*1.2)*0.4+0.6;
+   let spx=(Math.sin(i*2.1))*es*0.25;
+   let spy=-es*0.1+Math.cos(i*1.7)*es*0.15;
+   X.fillStyle=`rgba(255,255,255,${sp*morph})`;
+   X.beginPath();X.arc(spx,spy,3,0,Math.PI*2);X.fill();
+  }
+ }
+
+ X.restore();
+
+ // Big snowflakes swirling
+ for(let i=0;i<6;i++){
+  let a=t*0.015+i*Math.PI/3;
+  let r2=150+Math.sin(t*0.02+i)*30;
+  let fx=W/2+Math.cos(a)*r2;
+  let fy=H/2+Math.sin(a)*r2-50;
+  drawSnowflakeCrystal(fx,fy,12,t*0.01+i);
+ }
+}
+
+// ── LEVEL COMPLETE SCREEN ──
+function drawLevelComplete(){
+ G.time++;
+ X.fillStyle='rgba(10,10,40,0.92)';X.fillRect(0,0,W,H);
+
+ // Celebration snowflakes
+ for(let i=0;i<20;i++){
+  let fx=(i*97+G.time*0.5)%W;
+  let fy=(i*61+G.time*0.8)%H;
+  drawSnowflakeCrystal(fx,fy,8+i%5,G.time*0.01+i);
+ }
+
+ X.fillStyle='#fff';X.font='bold 36px sans-serif';X.textAlign='center';
+ X.fillText("Level Complete!",W/2,H*0.3);
+
+ // Snowflakes collected
+ X.fillStyle='#87CEEB';X.font='24px sans-serif';
+ X.fillText(`Snowflakes: ${G.collected} / ${G.total}`,W/2,H*0.42);
+
+ // Stars based on collection
+ let stars=G.collected>=G.total?3:G.collected>=G.total*0.5?2:1;
+ for(let i=0;i<3;i++){
+  let sx=W/2-60+i*60;
+  X.fillStyle=i<stars?'#FFD700':'rgba(100,100,100,0.4)';
+  X.font='40px sans-serif';X.fillText('★',sx,H*0.55);
+ }
+
+ let blink=Math.sin(G.time*0.06)*0.3+0.7;
+ X.fillStyle=`rgba(200,200,255,${blink})`;X.font='18px sans-serif';
+ X.fillText(G.level<4?"Tap to continue...":"Tap for the finale!",W/2,H*0.72);
+}
+
+// ── VICTORY SCREEN ──
+function drawVictory(){
+ G.time++;
+ // Aurora background
+ let grd=X.createLinearGradient(0,0,0,H);
+ grd.addColorStop(0,'#0a1a4a');grd.addColorStop(0.5,'#1a3a6a');grd.addColorStop(1,'#2a4a5a');
+ X.fillStyle=grd;X.fillRect(0,0,W,H);
+
+ // Aurora
+ X.globalAlpha=0.2;
+ for(let i=0;i<5;i++){
+  let ax=W*0.1+i*W*0.2+Math.sin(G.time*0.005+i*2)*40;
+  let agrd=X.createLinearGradient(ax,0,ax+80,H*0.4);
+  agrd.addColorStop(0,'transparent');
+  agrd.addColorStop(0.5,i%2===0?'#00ff88':'#8888ff');
+  agrd.addColorStop(1,'transparent');
+  X.fillStyle=agrd;X.fillRect(ax,0,80,H*0.4);
+ }
+ X.globalAlpha=1;
+
+ // Celebration snowflakes
+ for(let i=0;i<30;i++){
+  let fx=(i*97+G.time*0.4)%W;
+  let fy=(i*61+G.time*0.6)%H;
+  let sp=Math.sin(G.time*0.03+i)*0.3+0.5;
+  X.fillStyle=`rgba(255,255,255,${sp})`;
+  X.beginPath();X.arc(fx,fy,2+i%3,0,Math.PI*2);X.fill();
+ }
+
+ X.fillStyle='#fff';X.font=`bold ${Math.min(W*0.05,40)}px sans-serif`;X.textAlign='center';
+ X.fillText("Happy Birthday, Anna!",W/2,H*0.25);
+
+ X.fillStyle='#87CEEB';X.font='22px sans-serif';
+ X.fillText("The Ice Palace is ready for the party!",W/2,H*0.35);
+
+ // Total snowflakes
+ X.fillStyle='#FFD700';X.font='bold 26px sans-serif';
+ X.fillText(`Total Snowflakes: ${G.totalAll}`,W/2,H*0.48);
+
+ // Draw Elsa and Anna together
+ drawAnnaSmall(W/2-60,H*0.65);
+
+ // Mini Elsa
+ X.save();X.translate(W/2+60,H*0.62);
+ let ms=55;
+ X.fillStyle='#87CEEB';
+ X.beginPath();X.moveTo(-ms*0.25,-ms*0.3);X.lineTo(ms*0.25,-ms*0.3);
+ X.lineTo(ms*0.35,ms*0.1);X.lineTo(-ms*0.35,ms*0.1);X.fill();
+ X.fillStyle='#87CEEB';X.fillRect(-ms*0.15,-ms*0.5,ms*0.3,ms*0.22);
+ X.fillStyle='#FFF0F0';X.beginPath();X.arc(0,-ms*0.65,ms*0.23,0,Math.PI*2);X.fill();
+ X.fillStyle='#E8E0C8';X.beginPath();X.arc(0,-ms*0.7,ms*0.25,Math.PI+0.2,Math.PI*2-0.2);X.fill();
+ X.fillStyle='#4169E1';
+ X.beginPath();X.arc(-ms*0.08,-ms*0.66,ms*0.04,0,Math.PI*2);X.fill();
+ X.beginPath();X.arc(ms*0.08,-ms*0.66,ms*0.04,0,Math.PI*2);X.fill();
+ X.strokeStyle='#d09090';X.lineWidth=1.5;
+ X.beginPath();X.arc(0,-ms*0.56,ms*0.06,0.2,Math.PI-0.2);X.stroke();
+ X.restore();
+
+ // Heart between them
+ let hb=Math.sin(G.time*0.05)*3;
+ X.fillStyle='#ff6b8a';X.font='28px sans-serif';
+ X.fillText('❤',W/2,H*0.60+hb);
+
+ let blink=Math.sin(G.time*0.06)*0.3+0.7;
+ X.fillStyle=`rgba(200,200,255,${blink})`;X.font='16px sans-serif';
+ X.fillText("Tap to play again!",W/2,H*0.85);
+}
+
+// ── MAIN LOOP ──
+function loop(){
+ updateElsa();
+ render();
+ requestAnimationFrame(loop);
+}
+
+// Start
+G.time=0;
+loop();
+
+// ── PWA SERVICE WORKER ──
+if('serviceWorker' in navigator){
+ let sw=`self.addEventListener('install',e=>self.skipWaiting());
+ self.addEventListener('activate',e=>self.clients.claim());
+ self.addEventListener('fetch',e=>{
+  e.respondWith(caches.open('frozen-v3').then(c=>
+   c.match(e.request).then(r=>r||fetch(e.request).then(res=>{
+    if(res.ok)c.put(e.request,res.clone());return res;
+   }).catch(()=>new Response('Offline',{status:503}))
+  ));
+ });`;
+ let blob=new Blob([sw],{type:'application/javascript'});
+ navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+</script>
+</body>
+</html>
