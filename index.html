@@ -197,7 +197,7 @@ grid:mg([
 const G={
  screen:'title',level:0,time:0,
  // Elsa position (tile coords)
- px:1,py:9,vx:0,vy:0,dir:1,grounded:false,jumping:false,
+ px:1,py:9,vx:0,vy:0,dir:1,grounded:false,jumping:false,spawnX:1,spawnY:9,
  frame:0,breath:0,walkCycle:0,
  // Olaf
  ox:0.5,oy:9,
@@ -358,6 +358,7 @@ function loadLevel(n){
   }
  }
 
+ G.spawnX=spawnX;G.spawnY=spawnY;
  G.px=spawnX;G.py=spawnY;G.vx=0;G.vy=0;G.dir=1;G.grounded=false;
  G.ox=spawnX-0.6;G.oy=spawnY;
  G.cx=G.px-5;G.cy=0;
@@ -380,7 +381,7 @@ function nextLevel(){
 }
 
 // ── PHYSICS ──
-const GRAV=0.4, JUMPV=-8.5, MAXVY=12, SPD=0.18, MAXSX=4.5, FRIC=0.82;
+const GRAV=0.025, JUMPV=-0.38, MAXVY=0.45, SPD=0.012, MAXSX=0.18, FRIC=0.82;
 const PW=0.55, PH=0.95; // player hitbox in tiles
 
 function solid(gx,gy){
@@ -436,7 +437,7 @@ function updateElsa(){
   G.ox=G.px-0.8;G.oy=G.py;
   // End ride
   if(G.svenTimer>200||G.svenX>LW-4){
-   G.svenRide=false;G.py=G.svenY-0.2;G.vy=0;G.vx=2;
+   G.svenRide=false;G.py=G.svenY-0.2;G.vy=0;G.vx=0.12;
   }
   updateCamera();
   return;
@@ -450,7 +451,7 @@ function updateElsa(){
  if(Math.abs(G.vx)<0.01)G.vx=0;
 
  // Walk cycle
- if(G.grounded&&Math.abs(G.vx)>0.3)G.walkCycle+=Math.abs(G.vx)*0.15;
+ if(G.grounded&&Math.abs(G.vx)>0.01)G.walkCycle+=Math.abs(G.vx)*4;
 
  // Jump
  if(jPress&&G.grounded){
@@ -464,7 +465,7 @@ function updateElsa(){
  if(G.vy>MAXVY)G.vy=MAXVY;
 
  // Horizontal collision
- let nx=G.px+G.vx*0.016*60;
+ let nx=G.px+G.vx;
  let left=nx, right=nx+PW;
  let top=G.py+0.05, bot=G.py+PH-0.05;
  let blocked=false;
@@ -482,7 +483,7 @@ function updateElsa(){
  G.px=nx;
 
  // Vertical collision
- let ny=G.py+G.vy*0.016*60;
+ let ny=G.py+G.vy;
  G.grounded=false;
  if(G.vy>0){
   let bl=ny+PH, bx1=G.px+0.1, bx2=G.px+PW-0.1;
@@ -491,7 +492,7 @@ function updateElsa(){
   }
   // Land on blocks
   for(let b of G.blocks){
-   if(G.px+PW>b.x&&G.px<b.x+1&&ny+PH>b.y&&ny+PH<b.y+0.3){
+   if(G.px+PW>b.x&&G.px<b.x+1&&ny+PH>b.y&&ny+PH<b.y+0.5&&G.py+PH<=b.y+0.1){
     ny=b.y-PH;G.vy=0;G.grounded=true;G.jumping=false;
    }
   }
@@ -502,9 +503,10 @@ function updateElsa(){
  }
  G.py=ny;
 
- // Fall off screen
+ // Fall off screen — respawn at level start
  if(G.py>LH+2){
-  G.px=1;G.py=LH-2;G.vx=0;G.vy=0;
+  G.px=G.spawnX;G.py=G.spawnY;G.vx=0;G.vy=0;
+  for(let i=0;i<10;i++)spawnP(G.px+PW/2,G.py+PH/2,'#87CEEB',0.05);
  }
 
  // Collect snowflakes
@@ -1037,7 +1039,7 @@ function drawElsa(){
  let p=w2s(G.px,G.py);
  let s=TS*1.1; // Elsa is slightly bigger than a tile
  let bob=Math.sin(G.breath)*2;
- let walkBob=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle)*3:0;
+ let walkBob=G.grounded&&Math.abs(G.vx)>0.01?Math.sin(G.walkCycle)*3:0;
 
  let sx=p.x+TS*0.27, sy=p.y+TS*PH+bob+walkBob;
 
@@ -1068,7 +1070,7 @@ function drawElsa(){
  }
 
  // Legs (walking animation)
- let legAnim=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle):0;
+ let legAnim=G.grounded&&Math.abs(G.vx)>0.01?Math.sin(G.walkCycle):0;
  X.fillStyle='#FFF0F0';
  X.fillRect(-s*0.08+legAnim*s*0.03,-s*0.02,s*0.06,s*0.05);
  X.fillRect(s*0.02-legAnim*s*0.03,-s*0.02,s*0.06,s*0.05);
@@ -1112,7 +1114,7 @@ function drawElsa(){
 
  // Arms with animation
  let armSwing=G.jumping&&G.vy<0?-1.3:-0.3+Math.sin(G.breath*2)*0.08;
- let walkArm=G.grounded&&Math.abs(G.vx)>0.3?Math.sin(G.walkCycle)*0.4:0;
+ let walkArm=G.grounded&&Math.abs(G.vx)>0.01?Math.sin(G.walkCycle)*0.4:0;
  X.strokeStyle='#FFF0F0';X.lineWidth=s*0.065;X.lineCap='round';
  // Right arm
  X.beginPath();X.moveTo(s*0.14,-s*0.40);
